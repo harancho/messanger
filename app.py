@@ -15,7 +15,7 @@ app.config['SECRET_KEY'] = '5791628bb0b13ce0c676dfde280ba245'
 con = lite.connect('site.db')
 with con:
 	cur = con.cursor()
-	cur.execute("CREATE TABLE IF NOT EXISTS messages(id INTEGER PRIMARY KEY, sender TEXT , receiver Text , message)")
+	cur.execute("CREATE TABLE IF NOT EXISTS messages(id INTEGER PRIMARY KEY, sender TEXT , receiver Text , message1 , message2)")
 	cur.execute("CREATE TABLE IF NOT EXISTS users(id INTEGER PRIMARY KEY, username TEXT , password TEXT , token TEXT , public_key)")
 
 users = {}
@@ -121,7 +121,8 @@ def login():
 						if key_status == 'yes':
 							token = jwt.encode({'user' : username} , app.config['SECRET_KEY'])
 							token = token.decode('UTF-8')
-							return jsonify(message = 'Logged in successfully!', result = 'yes' , token = token)
+							my_public_key = row[4]
+							return jsonify(message = 'Logged in successfully!', result = 'yes' , token = token , my_public_key = my_public_key)
 						else:
 							return jsonify(message ='Please log in from registered device or from the registered browser!', result = 'no')
 					else:
@@ -179,9 +180,18 @@ def message():
 
 				# decrypt this message(row[4]) with my private key and then
 				# pass in conversatiions
-				conversations = conversations + [row[3]]
+				conversations = conversations + [row[4]]
 
-	return jsonify(conversations = conversations)
+		cur.execute("select * from users")
+		while True:
+			row = cur.fetchone()
+			if row == None:
+				break
+			if row[1] == receiver_username:
+				receiver_public_key = row[4]
+				break
+
+	return jsonify(conversations = conversations, receiver_public_key = receiver_public_key)
 
 @socketio.on('session_id')
 @session_authorization
@@ -198,14 +208,15 @@ def session_id():
 	users[username] = request.sid
 
 @socketio.on('message')
-def handle_my_custom_event(username_receiver,message,username_sender):
+def handle_my_custom_event(username_receiver,message1,message2,username_sender):
 
 	con = lite.connect('site.db')
 	with con:
 		cur = con.cursor()
-		cur.execute("INSERT INTO messages (sender , receiver , message) VALUES (?,?,?)",(username_sender,username_receiver , message))
+		cur.execute("INSERT INTO messages (sender , receiver , message1,message2) VALUES (?,?,?,?)",(username_sender,username_receiver , message1, message2))
 
 	conversations =[]
+	conversations2 = []
 
 	with con:
 		cur = con.cursor()
@@ -216,16 +227,20 @@ def handle_my_custom_event(username_receiver,message,username_sender):
 				break
 			if row[1] == username_sender and row[2] == username_receiver:
 				conversations = conversations + [row[1]]
+				conversations2 = conversations2 + [row[1]]
 
 				# decrypt this message(row[3]) with my private key and then
 				# pass in conversatiions
 				conversations = conversations + [row[3]]
+				conversations2 = conversations2 + [row[4]] 
 			if row[1] == username_receiver and row[2] == username_sender:
 				conversations = conversations + [row[1]]
+				conversations2 = conversations2 +[row[1]]
 
 				# decrypt this message(row[4]) with my private key and then
 				# pass in conversatiions
-				conversations = conversations + [row[3]]
+				conversations = conversations + [row[4]]
+				conversations2 = conversations2 + [row[3]]
 
 	ans = 0
 	for user in users:
@@ -233,7 +248,7 @@ def handle_my_custom_event(username_receiver,message,username_sender):
 			ans = 1
 			recipient_session_id = users[username_receiver]
 			my_session_id = users[username_sender]
-			emit('message', [conversations, username_sender] , room = recipient_session_id)
+			emit('message', [conversations2, username_sender] , room = recipient_session_id)
 			emit('message', [conversations, username_sender] , room = my_session_id)
 			break
 

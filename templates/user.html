@@ -80,6 +80,7 @@
 
     <script src="https://ajax.googleapis.com/ajax/libs/jquery/1.12.4/jquery.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/1.7.3/socket.io.min.js"></script>
+    <script type="text/javascript" src="https://unpkg.com/virgil-crypto@^4.0.0/dist/browser.umd.js"></script>
 
     <script type="text/javascript">
 
@@ -97,17 +98,27 @@
                 success:function(data) {
 
                     var conversations = data.conversations;
+                    var receiver_public_key = data.receiver_public_key;
+                    window.localStorage.setItem('receiver_public_key', receiver_public_key);
                     var chats = "";
 
+                    VirgilCrypto.initCrypto().then(() => {
+                        const virgilCrypto = new VirgilCrypto.VirgilCrypto();
+                        var my_private_key = window.localStorage.getItem(username+'_private_key');
+
                     for(var i=0 ; i<conversations.length ; i = i+2){
+                        var decryptedData = virgilCrypto.decrypt(conversations[i+1], virgilCrypto.importPrivateKey(my_private_key));
+                        decryptedData = decryptedData.toString('utf8');
+
                         if(conversations[i] == receiver_username){
-                            chats += "<p>" + conversations[i+1] + "</p>";
+                            chats += "<p>" + decryptedData + "</p>";
                         }
                         else{
-                            chats += "<p style='text-align:right;'>" + conversations[i+1] + "</p>";
+                            chats += "<p style='text-align:right;'>" + decryptedData + "</p>";
                         }
                     }
                     document.getElementById("message_display").innerHTML = chats;
+                    })
                 }
             })
             $("#message_div").css("visibility","visible");
@@ -119,40 +130,51 @@
     
         $(document).ready(function(){
 
-            $("#logout").click(function(){
-                document.cookie = 'token=;' + 'max-age = 0;'; 
-            });
-
             var send_button_present ;
             var username = '{{username}}';
+
+            $("#logout").click(function(){
+                document.cookie = 'token=;' + 'max-age = 0;';
+                window.localStorage.removeItem('receiver_public_key');
+                window.localStorage.removeItem(username+'_public_key'); 
+            });
 
             var socket = io.connect('http://127.0.0.1:5000');
 
             socket.on('message',function(msg){
-                console.log(msg);
                 if(msg[1] == $("#message_heading").html() || msg[1] == username){
                     var chats = "";
+
+                    VirgilCrypto.initCrypto().then(() => {
+                    const virgilCrypto = new VirgilCrypto.VirgilCrypto();
+                    var my_private_key = window.localStorage.getItem(username+'_private_key');
+
                     if(msg[1] == $("#message_heading").html()){
                     for(var i=0 ; i<msg[0].length ; i = i+2){
+                        var decryptedData = virgilCrypto.decrypt(msg[0][i+1], virgilCrypto.importPrivateKey(my_private_key));
+                        decryptedData = decryptedData.toString('utf8');
                         if(msg[0][i] == msg[1]){
-                            chats += "<p>" + msg[0][i+1] + "</p>";
+                            chats += "<p>" + decryptedData + "</p>";
                         }
                         else{
-                            chats += "<p style='text-align:right;'>" + msg[0][i+1] + "</p>";
+                            chats += "<p style='text-align:right;'>" + decryptedData + "</p>";
                         }
                     }
                     }
                     else{
                     for(var i=0 ; i<msg[0].length ; i = i+2){
+                        var decryptedData = virgilCrypto.decrypt(msg[0][i+1], virgilCrypto.importPrivateKey(my_private_key));
+                        decryptedData = decryptedData.toString('utf8');
                         if(msg[0][i] == msg[1]){
-                            chats += "<p style='text-align:right;'>" + msg[0][i+1] + "</p>";
+                            chats += "<p style='text-align:right;'>" + decryptedData + "</p>";
                         }
                         else{
-                            chats += "<p>" + msg[0][i+1] + "</p>";
+                            chats += "<p>" + decryptedData + "</p>";
                         }
                     }
                     }
                     document.getElementById("message_display").innerHTML = chats;
+                    })
                 }
                 else{
                     $('#user_button_' + msg[1]).css('background-color', 'green');
@@ -176,9 +198,28 @@
 
                 e.preventDefault();
                 var receiver_username = $("#message_heading").html();
+                var some_message = $("#message_input").val();
 
-                if($("#message_input").val() != ''){
-                socket.emit('message',receiver_username,$("#message_input").val(),username);
+                if(some_message != ''){
+
+                    VirgilCrypto.initCrypto().then(() => {
+                        const virgilCrypto = new VirgilCrypto.VirgilCrypto();
+                        const my_public_key = window.localStorage.getItem(username+'_public_key');
+                        const receiver_public_key = window.localStorage.getItem('receiver_public_key');
+                        var message1 = virgilCrypto.encrypt(
+                            { value: some_message, encoding: 'utf8' },
+                            virgilCrypto.importPublicKey(my_public_key)
+                        );
+                        message1 = message1.toString('base64');
+
+                        var message2 = virgilCrypto.encrypt(
+                            { value: some_message, encoding: 'utf8' },
+                            virgilCrypto.importPublicKey(receiver_public_key)
+                        );
+                        message2 = message2.toString('base64');
+
+                    socket.emit('message',receiver_username,message1,message2,username);
+                });
                 }
                 $("#message_input").val('');
                 //code ends

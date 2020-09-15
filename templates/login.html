@@ -133,7 +133,7 @@
 				return;
 			}
 			e.preventDefault();
-			const cat = localStorage.getItem('my_private_key');
+			const cat = localStorage.getItem($("#username").val()+'_private_key');
 			if(cat){
 				var key_status = 'yes';
 			}
@@ -151,7 +151,9 @@
                		message = data.message;
                		alert(message);
                		if(data.result == 'yes'){
+               			my_public_key = data.my_public_key;
                			token = data.token;
+               			window.localStorage.setItem($("#username").val()+'_public_key', my_public_key);
                			document.cookie = 'token=' + token;
                			window.location.replace("http://127.0.0.1:5000/user");
                		}

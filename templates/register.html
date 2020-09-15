@@ -148,7 +148,7 @@
                 		message = data.message;
                 		alert(message);
                 		if(data.result == 'yes'){
-                			window.localStorage.setItem('my_private_key', private_key);
+                			window.localStorage.setItem($("#username").val()+'_private_key', private_key);
                 			window.location.replace("http://127.0.0.1:5000/login");
                 		}
                 	}
